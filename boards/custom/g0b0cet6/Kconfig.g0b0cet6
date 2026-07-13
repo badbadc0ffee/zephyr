@@ -1,0 +1,5 @@
+# Copyright (c) 2026 <your name>
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_G0B0CET6
+	select SOC_STM32G0B0XX

@@ -1,0 +1,15 @@
+identifier: g0b0cet6
+name: Custom STM32G0B0CET6
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+  - gnuarmemb
+ram: 144
+flash: 512
+supported:
+  - uart
+  - gpio
+  - usb_device
+  - usbd
+vendor: custom

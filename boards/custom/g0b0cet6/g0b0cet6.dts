@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2026 <your name>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <st/g0/stm32g0b0Xe.dtsi>
+#include <st/g0/stm32g0b0cetx-pinctrl.dtsi>
+
+/ {
+	model = "Custom STM32G0B0CET6 board";
+	compatible = "custom,g0b0cet6";
+
+	chosen {
+		zephyr,console = &usart1;
+		zephyr,shell-uart = &usart1;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+	};
+};
+
+/*
+ * The STM32G0B0 has USB but NO CRS (Clock Recovery System), so the internal
+ * HSI48 cannot be trimmed against the USB SOF and does not reliably meet the
+ * USB FS clock tolerance over temperature. A 48 MHz clock derived from an
+ * external HSE crystal via the PLL "Q" output is used for USB instead.
+ *
+ * Adjust clk_hse clock-frequency to match the crystal fitted on your board.
+ */
+&clk_hse {
+	clock-frequency = <DT_FREQ_M(8)>;
+	status = "okay";
+};
+
+/*
+ * VCO = HSE / M * N = 8 MHz / 1 * 24 = 192 MHz
+ *   SYSCLK = VCO / R = 192 / 3 = 64 MHz  (max for STM32G0)
+ *   USB    = VCO / Q = 192 / 4 = 48 MHz  (routed to USB below)
+ */
+&pll {
+	div-m = <1>;
+	mul-n = <24>;
+	div-p = <4>;
+	div-q = <4>;
+	div-r = <3>;
+	clocks = <&clk_hse>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(64)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <1>;
+};
+
+&usart1 {
+	pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+};
+
+/*
+ * USB full-speed device controller.
+ * USB_SEL(1) selects the PLL "Q" clock (48 MHz) as the USB clock source.
+ */
+zephyr_udc0: &usb {
+	clocks = <&rcc STM32_CLOCK(APB1, 13)>,
+		 <&rcc STM32_SRC_PLL_Q USB_SEL(1)>;
+	pinctrl-0 = <&usb_dm_pa11 &usb_dp_pa12>;
+	pinctrl-names = "default";
+	status = "okay";
+};
