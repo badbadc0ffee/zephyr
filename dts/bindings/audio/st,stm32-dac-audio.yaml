@@ -1,0 +1,87 @@
+# Copyright (c) 2026 Draeger
+# SPDX-License-Identifier: Apache-2.0
+
+description: |
+  STM32 DAC one-shot 8-bit PCM audio playback via hardware timer-triggered DMA.
+
+  This is a logical driver layered on top of an existing STM32 DAC channel
+  (referenced via "io-channels"), an existing STM32 basic timer's counter child
+  (used for its Counter API frequency setup and, via direct LL_TIM_* register
+  access, to route its TRGO output to the DAC's hardware trigger input), and
+  a DMA channel that feeds the DAC's data holding register on every trigger.
+
+  It does not use the generic dac.h channel_setup()/write_value() API at
+  runtime: the DAC hardware trigger source can only be programmed while the
+  channel is disabled, which the generic dac_stm32 driver's channel_setup()
+  does not support (it always ends by enabling the channel). This driver
+  therefore drives the DAC/timer registers directly via the STM32 LL layer.
+
+  Example (STM32L1, DAC channel 1, TIM6, DMA1 ch2):
+    audio_dac0: audio-dac {
+      compatible = "st,stm32-dac-audio";
+      io-channels = <&dac1 1>;
+      timer = <&timers6>;
+      dac-trigger-source = "TIM6_TRGO";
+      dmas = <&dma1 2 (STM32_DMA_PERIPH_TX | STM32_DMA_PRIORITY_HIGH)>;
+      dma-names = "tx";
+    };
+
+compatible: "st,stm32-dac-audio"
+
+include: base.yaml
+
+properties:
+  io-channels:
+    type: phandle-array
+    required: true
+    description: |
+      Phandle to the DAC controller node (e.g. &dac1) and DAC channel number,
+      using the same convention as DAC_DT_SPEC_GET_BY_IDX() in dac.h, e.g.
+      "io-channels = <&dac1 1>;" for channel 1. The referenced DAC node must
+      keep status = "okay" with its normal pinctrl-0 so the existing
+      dac_stm32 driver continues to gate its clock and apply pinctrl.
+
+  timer:
+    type: phandle
+    required: true
+    description: |
+      Phandle to the basic timer node (e.g. &timers6 or &timers7) whose TRGO
+      output will be routed to the DAC's hardware trigger input. The
+      referenced node's "counter" child must keep status = "okay" so the
+      Counter API can be used to configure the 8 kHz tick and so the timer's
+      own clock is enabled by counter_stm32_init_timer(). This node's TRGO
+      selection (LL_DAC_TRIG_EXT_TIM6_TRGO vs ...TIM7_TRGO) must match which
+      physical timer is referenced here -- see dac-trigger-source below.
+
+  dac-trigger-source:
+    type: string
+    required: true
+    enum:
+      - "TIM6_TRGO"
+      - "TIM7_TRGO"
+    description: |
+      Which LL_DAC_TRIG_EXT_* value to program into the DAC's trigger-source
+      field. Must correspond to whichever physical timer "timer" points at.
+      Kept as an explicit property (rather than derived from "timer") so the
+      driver .c file doesn't need per-SoC-family knowledge of which timer
+      instance maps to which LL_DAC_TRIG_EXT_TIMx_TRGO constant.
+
+  dmas:
+    required: true
+    description: |
+      DMA channel for streaming samples to the DAC's data holding register.
+      Exactly one entry; must name "tx" in dma-names.
+
+      IMPORTANT: The DMA1 channel number depends on the DAC channel and the
+      STM32 family's DMA request mapping. For STM32L1 (from RM0038 Table 41):
+        - DAC channel 1 → DMA1 channel 2 (shared with TIM6_UP/SPI1_RX/USART3_TX)
+        - DAC channel 2 → DMA1 channel 3 (shared with TIM7_UP/SPI1_TX/USART3_RX)
+
+      Re-check the reference manual's DMA request table before trusting this
+      mapping in your devicetree overlay, and beware of peripheral conflicts
+      if your board uses the same DMA channel for USART or SPI elsewhere.
+
+  dma-names:
+    required: true
+    description: |
+      Must be exactly one entry: "tx".

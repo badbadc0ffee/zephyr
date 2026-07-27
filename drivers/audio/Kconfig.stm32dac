@@ -1,0 +1,28 @@
+# Copyright (c) 2026 Draeger
+# SPDX-License-Identifier: Apache-2.0
+
+config AUDIO_DAC_STM32
+	bool "STM32 DAC audio playback driver (timer-triggered DMA)"
+	default y
+	depends on DT_HAS_ST_STM32_DAC_AUDIO_ENABLED
+	select DAC
+	select COUNTER
+	select DMA
+	help
+	  Enable one-shot 8-bit mono PCM playback through an STM32 on-chip DAC
+	  channel using a hardware timer (TIM6/TIM7 TRGO) to pace DMA transfers
+	  into the DAC data holding register. Sample rate is configurable and
+	  driven by the timer frequency.
+
+config AUDIO_DAC_STM32_INIT_PRIORITY
+	int "STM32 DAC audio driver init priority"
+	default 90
+	help
+	  Device initialization priority for the STM32 DAC audio driver.
+	  Must be numerically greater than CONFIG_COUNTER_INIT_PRIORITY
+	  (default 60): this driver's init wires TIM6/7's TRGO output to the
+	  DAC's trigger input, and must run after the referenced Counter
+	  device's own init has completed its one-time software-forced update
+	  event. With LL_TIM_SetUpdateSource(..., LL_TIM_UPDATESOURCE_COUNTER)
+	  set unconditionally, this ordering is a secondary safeguard against
+	  the spurious-first-trigger risk.
